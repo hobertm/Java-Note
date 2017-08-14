@@ -3,8 +3,8 @@
 - jdbc问题总结如下：  
 1、数据库连接创建、释放频繁造成系统资源浪费，从而影响系统性能。如果使用数据库连接池可解决此问题。  
 2、Sql语句在代码中硬编码，造成代码不易维护，实际应用中sql变化的可能较大，sql变动需要改变java代码。  
-3、使用preparedStatement向占有位符号传参数存在硬编码，因为sql语句的where条件不一定，可能多也可能少，修改sql还要修改代码，系统不易维护。  
-4、对结果集解析存在硬编码（查询列名），sql变化导致解析代码变化，系统不易维护，如果能将数据库记录封装成pojo对象解析比较方便。  
+3、使用preparedStatement向占有位符号传参数存在硬编码，因为sql语句条件不一定，还要修改代码，系统不易维护。  
+4、对结果集解析存在硬编码，sql变化导致解析代码变化，系统不易维护，将数据库记录封装成pojo对象比较方便。  
 - Mybatis架构  
 ![](http://oumcs7yiy.bkt.clouddn.com/SSM-1.png)  
 - \#{}和${}  
@@ -101,4 +101,80 @@ Mapper接口开发需要遵循以下规范：
 注册指定包下的所有mapper接口  
 如：`<package name="cn.itcast.mybatis.mapper"/>`  
 注意：此种方法要求mapper接口名称和mapper映射文件名称相同，且放在同一个目录中。  
-package是主要方式  
+**package是主要方式**  
+
+
+- parameterType(输入类型)pojo包装对象  
+QueryVo包装类  
+```java
+public class QueryVo {
+    // 包含其他的pojo
+    private User user;
+
+    public User getUser() {
+        return user;
+    }
+    public void setUser(User user) {
+        this.user = user;
+    }
+}
+```
+Mapper.xml，要通过user.username方式传递  
+```xml
+    <!-- 根据用户名模糊查询 -->
+    <select id="findUserByQueryVo" parameterType="QueryVo" resultType="com.itheima.mybatis.pojo.User">
+        select * from user where username like "%"#{user.username}"%"
+    </select>
+```
+
+- resultType(输出类型)简单类型  
+```java
+public Integer countUser();
+```
+```xml
+    <select id="countUser" resultType="Integer">
+        select count(1) from user
+    </select>
+
+```
+- resultMap  
+一样的字段可以省略  
+```xml
+    <resultMap type="Orders" id="orders">
+        <result column="user_id" property="userId"/>
+    </resultMap>
+```
+- 动态sql，if和where  
+where标签可以去掉第一个前and  
+```xml
+ <!--   根据性别和名字查询用户  where 可以去掉第一个前ANd   -->
+     <select id="selectUserBySexAndUsername" parameterType="User" resultType="User">
+        <include refid="selector"/>
+        <where>
+            <if test="sex != null and sex != ''">
+                 and sex = #{sex} 
+            </if>
+            <if test="username != null and username != ''">
+                 and username = #{username}
+            </if>
+        </where>
+     </select>
+```
+- Sql片段  
+```xml
+    <sql id="selector">
+        select * from user
+    </sql>
+
+    <select id="selectUserBySexAndUsername" parameterType="User" resultType="User">
+        <include refid="selector"/>
+        <where>
+            <if test="sex != null and sex != ''">
+                 and sex = #{sex} 
+            </if>
+            <if test="username != null and username != ''">
+                 and username = #{username}
+            </if>
+        </where>
+     </select>
+```
