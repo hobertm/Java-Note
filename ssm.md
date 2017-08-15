@@ -138,11 +138,15 @@ public Integer countUser();
 
 ```
 - resultMap  
+字段名不一致要手动映射
 一样的字段可以省略  
 ```xml
     <resultMap type="Orders" id="orders">
         <result column="user_id" property="userId"/>
     </resultMap>
+    <select id="selectOrdersList" resultMap="orders">
+        SELECT id, user_id, number, createtime, note FROM orders 
+    </select>
 ```
 - 动态sql，if和where  
 where标签可以去掉第一个前and  
@@ -161,6 +165,7 @@ where标签可以去掉第一个前and
      </select>
 ```
 - Sql片段  
+调用上面的片段  
 ```xml
     <sql id="selector">
         select * from user
@@ -178,3 +183,103 @@ where标签可以去掉第一个前and
         </where>
      </select>
 ```
+- foreach标签，多id查询，三种方式  
+collection的值可为list、array、idslist(当用QueryVo传递时，使用QueryVo类中成员名)  
+```xml
+     <!-- 多个ID (1,2,3)-->
+     <select id="selectUserByIds" parameterType="QueryVo" resultType="User">
+        <include refid="selector"/>
+        <where>
+            <foreach collection="list" item="id" separator="," open="id in (" close=")">
+                #{id}
+            </foreach>
+        </where>
+     </select>
+```
+```java
+public void testfindUserIDs() throws Exception {
+        //加载核心配置文件
+        String resource = "sqlMapConfig.xml";
+        InputStream in = Resources.getResourceAsStream(resource);
+        //创建SqlSessionFactory
+        SqlSessionFactory sqlSessionFactory = new SqlSessionFactoryBuilder().build(in);
+        //创建SqlSession
+        SqlSession sqlSession = sqlSessionFactory.openSession();
+        
+        UserMapper userMapper = sqlSession.getMapper(UserMapper.class);
+        List<Integer> ids  = new ArrayList<>();
+        ids.add(16);
+        ids.add(22);
+        ids.add(24);
+        /*  QueryVo vo = new QueryVo();
+        vo.setIdsList(ids);*/
+        
+//      List<User> users = userMapper.selectUserByIds(vo);
+/*      Integer[] ids = new Integer[3];
+        ids[0] = 16;
+        ids[2] = 22;
+        ids[1] = 24;*/
+        List<User> users = userMapper.selectUserByIds(ids);
+        for (User user2 : users) {
+            System.out.println(user2);
+        }
+    }
+```
+```java
+    public List<User> selectUserByIds(Integer[] ids);array
+    public List<User> selectUserByIds(List<Integer> ids); 
+    public List<User> selectUserByIds(QueryVo vo);
+```
+- 一对一关联  
+一对一关联，要在order中内建user对象，用resultMap进行关联  
+column和property框架不能自动补全  
+```xml
+    <!-- 
+        //一对一关联 查询  以订单为中心 关联用户
+    public List<Orders> selectOrders();
+     -->
+     <resultMap type="Orders" id="order">
+        <result column="id" property="id"/>
+        <result column="user_id" property="userId"/>
+        <result column="number" property="number"/>
+        <!-- 一对一 -->
+        <association property="user" javaType="User">
+            <id column="user_id" property="id"/>
+            <result column="username" property="username"/>
+        </association>
+     </resultMap>
+```
+
+- 一对多关联  
+ofType的值是list中的泛型  
+```xml
+     <!-- //一对多关联 public List<User> selectUserList(); -->
+    <resultMap type="User" id="user">
+        <id column="user_id" property="id"/>
+        <result column="username" property="username"/>
+        <!-- 一对多 -->
+        <collection property="ordersList" ofType="Orders">
+            <id column="id" property="id"/>
+            <result column="number" property="number"/>
+        </collection>
+    </resultMap>
+    <select id="selectUserList" resultMap="user">
+        SELECT 
+        o.id,
+        o.user_id, 
+        o.number,
+        o.createtime,
+        u.username 
+        FROM user u
+        left join orders o 
+        on o.user_id = u.id
+    </select>
+```
+
+- Mybatis整合spring  
+整合思路  
+1、SqlSessionFactory对象应该放到spring容器中作为单例存在。  
+2、传统dao的开发方式中，应该从spring容器中获得sqlsession对象。  
+3、Mapper代理形式中，应该从spring容器中直接获得mapper的代理对象。  
+4、数据库的连接以及数据库连接池事务管理都交给spring容器来完成。  
+
