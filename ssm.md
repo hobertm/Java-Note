@@ -7,6 +7,16 @@
 4、对结果集解析存在硬编码，sql变化导致解析代码变化，系统不易维护，将数据库记录封装成pojo对象比较方便。  
 - Mybatis架构  
 ![](http://oumcs7yiy.bkt.clouddn.com/SSM-1.png)  
+
+- mapper入门  
+parameterType传参类型，resultType自动返回类型，要求数据库字段和pojo一一对应  
+resultType设置了别名就不用写全类名了  
+```xml
+<select id="findUserById" parameterType="Integer" resultType="User">
+        select * from user where id = #{v}
+</select>
+```
+
 - \#{}和${}  
 ```
 #{}表示一个占位符号，通过#{}可以实现preparedStatement向占位符中设置值，自动进行java类型和jdbc类型转换。  
@@ -72,7 +82,51 @@ public void testQueryUserByUsername2() throws Exception {
     sqlSession.close();
 }
 ```
+- 增删改查  
+添加用户并返回用户的id  
+改用户信息，要传入user对象     
+```xml
+<!-- 写Sql语句   -->
+<mapper namespace="com.itheima.mybatis.mapper.UserMapper">
+    <!-- 通过ID查询一个用户 -->
+    <select id="findUserById" parameterType="Integer" resultType="User">
+        select * from user where id = #{v}
+    </select>
+    
+    <!-- //根据用户名称模糊查询用户列表
+    #{}    select * from user where id = ？    占位符  ? ==  '五'
+    ${}    select * from user where username like '%五%'  字符串拼接  
+    
+     -->
+    <select id="findUserByUsername" parameterType="String" resultType="com.itheima.mybatis.pojo.User">
+        select * from user where username like "%"#{haha}"%"
+    </select>
+    
+    <!-- 添加用户 -->
+    <insert id="insertUser" parameterType="com.itheima.mybatis.pojo.User">
+        <selectKey keyProperty="id" resultType="Integer" order="AFTER">
+            select LAST_INSERT_ID()
+        </selectKey>
+        insert into user (username,birthday,address,sex) 
+        values (#{username},#{birthday},#{address},#{sex})
+    </insert>
+    
+    <!-- 更新 -->
+    <update id="updateUserById" parameterType="com.itheima.mybatis.pojo.User">
+        update user 
+        set username = #{username},sex = #{sex},birthday = #{birthday},address = #{address}
+        where id = #{id}
+    </update>
+    
+    <!-- 删除 -->
+    <delete id="deleteUserById" parameterType="Integer">
+        delete from user 
+        where id = #{vvvvv}
+    </delete>
 
+
+</mapper>
+```
 - DAO的Mapper动态代理方式  
 Mapper接口开发需要遵循以下规范：  
 1、  Mapper.xml文件中的namespace与mapper接口的类路径相同  
@@ -84,6 +138,7 @@ Mapper接口开发需要遵循以下规范：
 动态代理对象调用sqlSession.selectOne()和sqlSession.selectList()  是根据mapper接口方法的返回值决定，如果返回list则调用selectList方法，如果返回单个对象则调用selectOne方法。  
 
 - properties和typeAliases  
+typeAliases设置包内的类别名不区分大小写  
 ```xml
     <properties resource="jdbc.properties"/>
     <!-- 别名 包以其子包下所有类   头字母大小都行-->
@@ -282,7 +337,61 @@ ofType的值是list中的泛型
 2、传统dao的开发方式中，应该从spring容器中获得sqlsession对象。  
 3、Mapper代理形式中，应该从spring容器中直接获得mapper的代理对象。  
 4、数据库的连接以及数据库连接池事务管理都交给spring容器来完成。  
+- mapper的动态代理开发  
+applicationContext  
+```xml
+    <context:property-placeholder location="classpath:db.properties"/>
+    
+    <!-- 数据库连接池 -->
+    <bean id="dataSource" class="org.apache.commons.dbcp.BasicDataSource"
+        destroy-method="close">
+        <property name="driverClassName" value="${jdbc.driver}" />
+        <property name="url" value="${jdbc.url}" />
+        <property name="username" value="${jdbc.username}" />
+        <property name="password" value="${jdbc.password}" />
+        <property name="maxActive" value="10" />
+        <property name="maxIdle" value="5" />
+    </bean>
+    
+    <!-- Mybatis的工厂 -->
+    <bean id="sqlSessionFactoryBean" class="org.mybatis.spring.SqlSessionFactoryBean">
+        <property name="dataSource" ref="dataSource"/>
+        <!-- 核心配置文件的位置 -->
+        <property name="configLocation" value="classpath:sqlMapConfig.xml"/>
+    </bean>
+    
+    <!-- Dao原始Dao -->
+    <bean id="userDao" class="com.itheima.mybatis.dao.UserDaoImpl">
+        <property name="sqlSessionFactory" ref="sqlSessionFactoryBean"/>
+    </bean>
+    <!-- Mapper动态代理开发 -->
+    <bean id="userMapper" class="org.mybatis.spring.mapper.MapperFactoryBean">
+        <property name="sqlSessionFactory" ref="sqlSessionFactoryBean"/>
+        <property name="mapperInterface" value="com.itheima.mybatis.mapper.UserMapper"/>
+    </bean>
+    
+    <!-- Mapper动态代理开发   扫描 -->
+    <bean class="org.mybatis.spring.mapper.MapperScannerConfigurer">
+        <!-- 基本包 -->
+        <property name="basePackage" value="com.itheima.mybatis.mapper"/>
+    </bean>
+    
+```
+sqlMapConfig
+```xml
+<configuration>
+    <!-- 设置别名 -->
+    <typeAliases>
+        <!-- 2. 指定扫描包，会把包内所有的类都设置别名，别名的名称就是类名，大小写不敏感 -->
+        <package name="com.itheima.mybatis.pojo" />
+    </typeAliases>
+    
+    <mappers>
+        <package name="com.itheima.mybatis.mapper"/>
+    </mappers>
 
+</configuration>
+```
 ## spring  
 - spring的优点  
 1、方便解耦，简化开发  （高内聚低耦合）  
@@ -936,7 +1045,7 @@ public class Demo {
     <aop:advisor advice-ref="txAdvice" pointcut-ref="txPc" />
 </aop:config>
 ```
-- 注解方式事物  
+- 注解方式配置事物  
 ```xml
 <!-- 开启使用注解管理aop事务 -->
 <tx:annotation-driven/>
@@ -960,3 +1069,72 @@ public class AccountServiceImpl implements AccountService {
 }
 ```
 
+##springmvc  
+- 架构图  
+![](http://oumcs7yiy.bkt.clouddn.com/SSM-2.png)  
+- 前端控制器配置  
+```xml
+  <!-- 前端控制器 -->
+  <servlet>
+    <servlet-name>springmvc</servlet-name>
+    <servlet-class>org.springframework.web.servlet.DispatcherServlet</servlet-class>
+    <!-- 默认找 /WEB-INF/[servlet的名称]-servlet.xml -->
+    <init-param>
+        <param-name>contextConfigLocation</param-name>
+        <param-value>classpath:springmvc.xml</param-value>
+    </init-param>
+  </servlet>
+  
+  <servlet-mapping>
+    <servlet-name>springmvc</servlet-name>
+    <!-- 
+        1. /*  拦截所有   jsp  js png .css  真的全拦截   建议不使用
+        2. *.action *.do 拦截以do action 结尾的请求     肯定能使用   ERP  
+        3. /  拦截所有 （不包括jsp) (包含.js .png.css)  强烈建议使用     前台 面向消费者  www.jd.com/search   /对静态资源放行
+     -->
+    <url-pattern>*.action</url-pattern>
+  </servlet-mapping>
+```
+通过拦截器拦截到ItemController  
+```java
+public class ItemController {
+    //注释匹配浏览器url  
+    @RequestMapping(value = "/item/itemlist.action")
+    public ModelAndView itemList(){
+        
+        // 创建页面需要显示的商品数据
+        List<Items> list = new ArrayList<Items>();
+        list.add(new Items(1, "1华为 荣耀8", 2399f, new Date(), "质量好！1"));
+        list.add(new Items(2, "2华为 荣耀8", 2399f, new Date(), "质量好！2"));
+        list.add(new Items(3, "3华为 荣耀8", 2399f, new Date(), "质量好！3"));
+        list.add(new Items(4, "4华为 荣耀8", 2399f, new Date(), "质量好！4"));
+        list.add(new Items(5, "5华为 荣耀8", 2399f, new Date(), "质量好！5"));
+        list.add(new Items(6, "6华为 荣耀8", 2399f, new Date(), "质量好！6"));
+        
+        ModelAndView mav = new ModelAndView();
+        //数据
+        mav.addObject("itemList", list);
+        mav.setViewName("itemList");
+        return mav;
+    }
+}
+```
+- springmvc.xml配置三大组件  
+注解驱动相当于配置了映射器和适配器  
+```xml
+        <!-- 扫描@Controler  @Service   -->
+        <context:component-scan base-package="com.itheima"/>
+        
+        <!-- 处理器映射器 -->
+<!--         <bean class="org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping"/> -->
+        <!-- 处理器适配器 -->
+<!--         <bean class="org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerAdapter"/> -->
+        <!-- 注解驱动 -->
+        <mvc:annotation-driven/>
+        
+        <!-- 视图解释器 -->
+        <bean class="org.springframework.web.servlet.view.InternalResourceViewResolver">
+            <property name="prefix" value="/WEB-INF/jsp/"/>
+            <property name="suffix" value=".jsp"/>
+        </bean>
+```
